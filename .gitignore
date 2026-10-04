@@ -1,0 +1,11 @@
+# Secrets and local env — never ship these in the extension
+.env
+.env.local
+web/.env
+web/.env.local
+server/.env
+src/supabase/public-config.js
+node_modules/
+/package-lock.json
+web/dist
+.DS_Store

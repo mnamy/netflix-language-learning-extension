@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Words</title>
+    <link rel="stylesheet" href="words.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <h1>My Words</h1>
+        <p class="sub">Local list plus optional Supabase account sync</p>
+      </header>
+
+      <section class="account" id="account">
+        <p id="account-status">Checking account…</p>
+        <form id="sign-in-form" class="account-form">
+          <input id="email" type="email" placeholder="Email" required autocomplete="email" />
+          <input
+            id="password"
+            type="password"
+            placeholder="Password"
+            required
+            autocomplete="current-password"
+          />
+          <button type="submit">Sign in</button>
+        </form>
+        <button type="button" id="google-sign-in" class="google">
+          Sign in with Google
+        </button>
+        <p id="account-error" class="account-error" hidden></p>
+        <button type="button" id="sign-out" class="sign-out" hidden>Sign out</button>
+      </section>
+
+      <section id="bank" hidden>
+      <section class="toolbar">
+        <input
+          id="search"
+          type="search"
+          placeholder="Search words"
+          autocomplete="off"
+        />
+        <label class="sort">
+          Sort
+          <select id="sort">
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </label>
+      </section>
+
+      <p id="empty" class="empty" hidden>No saved words yet.</p>
+      <ul id="list" class="list"></ul>
+      </section>
+    </main>
+    <script src="src/supabase/public-config.js"></script>
+    <script src="src/supabase/client.js"></script>
+    <script src="src/storage/words.js"></script>
+    <script src="words.js"></script>
+  </body>
+</html>

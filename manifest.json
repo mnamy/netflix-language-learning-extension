@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Netflix Language Learner",
+  "version": "0.8.0",
+  "description": "Click foreign-language Netflix subtitles to save words for later study.",
+  "permissions": ["storage", "identity"],
+  "host_permissions": [
+    "http://127.0.0.1:8787/*",
+    "https://*.supabase.co/*"
+  ],
+  "action": {
+    "default_title": "My Words"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.netflix.com/*",
+        "https://netflix.com/*"
+      ],
+      "js": [
+        "src/adapters/netflix.js",
+        "src/words.js",
+        "src/supabase/public-config.js",
+        "src/supabase/client.js",
+        "src/storage/words.js",
+        "src/translation/service.js",
+        "src/overlay.js",
+        "src/popup.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

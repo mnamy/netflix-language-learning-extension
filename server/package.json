@@ -1,0 +1,8 @@
+{
+  "name": "nflx-lang-translate-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node translate-proxy.mjs"
+  }
+}
