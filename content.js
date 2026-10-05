@@ -3,8 +3,6 @@
 // The subtitle sentence is kept in memory for the request only.
 // Do not log, save, or persist the sentence.
 
-console.log("Netflix language extension loaded");
-
 (function () {
   if (window !== window.top) {
     return;
@@ -20,13 +18,32 @@ console.log("Netflix language extension loaded");
   adapter.hideNativeSubtitles();
 
   const popup = NL.createTranslationPopup();
+  const overlay = NL.createSubtitleOverlay({
+    onWordClick: function (word, anchor) {
+      const normalized = NL.normalizeClickedWord(word);
+      if (!normalized) {
+        return;
+      }
+
+      requestTranslation(
+        normalized,
+        adapter.getLatestSubtitle
+          ? adapter.getLatestSubtitle()
+          : adapter.getCurrentSubtitle(),
+        anchor
+      );
+    },
+  });
   let lastCue = "";
   let translateRequestId = 0;
 
   function errorText(err) {
     const message = err && err.message ? err.message : "";
+    if (/Sign in to translate/i.test(message)) {
+      return "Sign in to translate words.";
+    }
     if (/Failed to fetch|NetworkError|Load failed/i.test(message)) {
-      return "Translation proxy is not running.";
+      return "Translation server is not running.";
     }
     return message || "Translation failed";
   }
@@ -38,21 +55,14 @@ console.log("Netflix language extension loaded");
       word: word,
       anchor: anchor,
       source: "netflix",
+      onHide: function () {
+        overlay.clearOpenWord();
+      },
       onRetry: function () {
         requestTranslation(word, sentence, anchor);
       },
       onSave: function (entry) {
-        return NL.saveWord(entry).then(function (result) {
-          return NL.pushWordToAccount(entry)
-            .then(function (sync) {
-              result.synced = Boolean(sync && sync.synced);
-              return result;
-            })
-            .catch(function () {
-              result.synced = false;
-              return result;
-            });
-        });
+        return NL.saveWord(entry);
       },
     });
 
@@ -64,7 +74,7 @@ console.log("Netflix language extension loaded");
         if (requestId !== translateRequestId) {
           return;
         }
-        popup.setTranslation(result.translation);
+        popup.setTranslation(result);
       })
       .catch(function (err) {
         if (requestId !== translateRequestId) {
@@ -73,24 +83,6 @@ console.log("Netflix language extension loaded");
         popup.setError(errorText(err));
       });
   }
-
-  const overlay = NL.createSubtitleOverlay({
-    onWordClick: function (word, anchor) {
-      const normalized = NL.normalizeClickedWord(word);
-      if (!normalized) {
-        return;
-      }
-
-      console.log("Netflix language word:", normalized);
-      requestTranslation(
-        normalized,
-        adapter.getLatestSubtitle
-          ? adapter.getLatestSubtitle()
-          : adapter.getCurrentSubtitle(),
-        anchor
-      );
-    },
-  });
 
   function refresh(text) {
     const next = text || "";

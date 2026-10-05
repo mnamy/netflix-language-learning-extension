@@ -1,19 +1,11 @@
-// Local vocabulary store. chrome.storage.local only.
-// Never persist subtitle sentences or transcripts.
+// Local vocabulary store. Used only while signed out.
+// Signed-in users read and write Supabase. Never persist subtitle sentences.
 
 globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
 (function () {
   const STORAGE_KEY = "savedWords";
-
-  function sameEntry(a, b) {
-    return (
-      String(a.word || "").normalize("NFC").toLowerCase() ===
-        String(b.word || "").normalize("NFC").toLowerCase() &&
-      String(a.translation || "").trim().toLowerCase() ===
-        String(b.translation || "").trim().toLowerCase()
-    );
-  }
+  const NL = globalThis.NetflixLanguage;
 
   function readList() {
     return new Promise(function (resolve) {
@@ -38,57 +30,6 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     });
   }
 
-  globalThis.NetflixLanguage.saveWord = async function (details) {
-    const normalize = globalThis.NetflixLanguage.normalizeClickedWord;
-    const word = normalize
-      ? normalize(details && details.word)
-      : String((details && details.word) || "").trim();
-    const translation = String((details && details.translation) || "").trim();
-    const source = String((details && details.source) || "netflix");
-    const sourceLanguage = String((details && details.sourceLanguage) || "").trim();
-
-    if (!word || !translation) {
-      throw new Error("Missing word or translation");
-    }
-
-    const list = await readList();
-    const incoming = { word: word, translation: translation };
-    if (list.some(function (item) { return sameEntry(item, incoming); })) {
-      return { saved: true, duplicate: true };
-    }
-
-    const record = {
-      word: word,
-      translation: translation,
-      source: source,
-      savedAt: Date.now(),
-    };
-    if (sourceLanguage) {
-      record.sourceLanguage = sourceLanguage;
-    }
-
-    record.id = "w_" + record.savedAt + "_" + list.length;
-    list.push(record);
-    await writeList(list);
-    return { saved: true, duplicate: false };
-  };
-
-  globalThis.NetflixLanguage.listSavedWords = function () {
-    return readList();
-  };
-
-  globalThis.NetflixLanguage.deleteSavedWord = async function (id) {
-    const target = String(id || "");
-    if (!target) {
-      throw new Error("Missing word id");
-    }
-    const list = await readList();
-    const next = list.filter(function (item) {
-      return entryId(item) !== target;
-    });
-    await writeList(next);
-  };
-
   function entryId(item) {
     if (item && item.id) {
       return String(item.id);
@@ -96,5 +37,90 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     return [item.word, item.translation, item.savedAt].join("|");
   }
 
-  globalThis.NetflixLanguage.savedWordId = entryId;
+  async function saveLocal(entry) {
+    const list = await readList();
+    const existing = list.find(function (item) {
+      return NL.sameWord(item, entry);
+    });
+
+    if (existing) {
+      existing.translation = NL.pickTranslation(
+        existing.translation,
+        entry.translation
+      );
+      existing.times_seen = Number(existing.times_seen || 1) + 1;
+      existing.savedAt = Date.now();
+      if (entry.sourceLanguage && !existing.sourceLanguage) {
+        existing.sourceLanguage = entry.sourceLanguage;
+      }
+      await writeList(list);
+      return { saved: true, duplicate: true, times_seen: existing.times_seen };
+    }
+
+    const record = {
+      word: entry.word,
+      translation: entry.translation,
+      source: entry.source,
+      savedAt: Date.now(),
+      times_seen: 1,
+    };
+    if (entry.sourceLanguage) {
+      record.sourceLanguage = entry.sourceLanguage;
+    }
+    record.id = "w_" + record.savedAt + "_" + list.length;
+    list.push(record);
+    await writeList(list);
+    return { saved: true, duplicate: false, times_seen: 1 };
+  }
+
+  async function signedIn() {
+    const token = NL.getAccessToken ? await NL.getAccessToken() : "";
+    return Boolean(token);
+  }
+
+  NL.listLocalSavedWords = readList;
+
+  NL.clearLocalSavedWords = function () {
+    return writeList([]);
+  };
+
+  NL.saveWord = async function (details) {
+    const entry = NL.prepareVocabEntry(details);
+    if (await signedIn()) {
+      try {
+        if (NL.migrateLocalWordsToAccount) {
+          await NL.migrateLocalWordsToAccount();
+        }
+      } catch (err) {
+        // Saving the clicked word still goes to the account.
+      }
+      return NL.pushWordToAccount(entry);
+    }
+    return saveLocal(entry);
+  };
+
+  NL.listSavedWords = async function () {
+    if (await signedIn()) {
+      return NL.listAccountWords();
+    }
+    return readList();
+  };
+
+  NL.deleteSavedWord = async function (id) {
+    const target = String(id || "");
+    if (!target) {
+      throw new Error("Missing word id");
+    }
+    if (await signedIn()) {
+      return NL.deleteAccountWord(target);
+    }
+    const list = await readList();
+    await writeList(
+      list.filter(function (item) {
+        return entryId(item) !== target;
+      })
+    );
+  };
+
+  NL.savedWordId = entryId;
 })();

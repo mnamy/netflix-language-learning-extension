@@ -43,17 +43,11 @@ export function AuthProvider({ children }) {
         }
         return supabase.auth.signInWithPassword({ email, password });
       },
-      signUp(email, password) {
-        if (!supabase) {
-          return Promise.reject(new Error("Supabase is not configured."));
-        }
-        return supabase.auth.signUp({ email, password });
-      },
       signOut() {
         if (!supabase) {
           return Promise.resolve();
         }
-        return supabase.auth.signOut();
+        return supabase.auth.signOut({ scope: "local" });
       },
       signInWithGoogle() {
         if (!supabase) {

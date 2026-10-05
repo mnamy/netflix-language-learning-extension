@@ -4,13 +4,20 @@ import {
   fetchSavedWords,
   updateLearningStatus,
 } from "../lib/savedWords";
+import { conjugatePresent } from "../lib/spanishPresent";
 
-const STATUSES = ["new", "learning", "learned"];
+const STATUSES = ["new", "learning", "mastered"];
+
+function isVerb(item) {
+  return String(item.part_of_speech || "").toLowerCase() === "verb";
+}
 
 export function Words() {
   const [words, setWords] = useState([]);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("newest");
+  const [tab, setTab] = useState("all");
+  const [openVerb, setOpenVerb] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -32,7 +39,8 @@ export function Words() {
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const filtered = words.filter((item) => {
+    const source = tab === "verbs" ? words.filter(isVerb) : words;
+    const filtered = source.filter((item) => {
       if (!needle) {
         return true;
       }
@@ -53,7 +61,7 @@ export function Words() {
       }
       return right - left;
     });
-  }, [words, query, sort]);
+  }, [words, query, sort, tab]);
 
   async function onStatus(id, status) {
     const previous = words;
@@ -84,15 +92,36 @@ export function Words() {
     }
   }
 
+  const verbCount = words.filter(isVerb).length;
+
   return (
     <section>
       <h1>Word bank</h1>
-      <p className="lede">Your saved words from Supabase. No extension sync yet.</p>
+      <p className="lede">The same account word bank as the Netflix extension.</p>
+
+      <div className="review-mode" role="tablist" aria-label="Word bank views">
+        <button
+          type="button"
+          role="tab"
+          className={tab === "all" ? "is-active" : ""}
+          onClick={() => setTab("all")}
+        >
+          All words
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={tab === "verbs" ? "is-active" : ""}
+          onClick={() => setTab("verbs")}
+        >
+          Verbs
+        </button>
+      </div>
 
       <div className="toolbar">
         <input
           type="search"
-          placeholder="Search words"
+          placeholder={tab === "verbs" ? "Search verbs" : "Search words"}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -108,11 +137,20 @@ export function Words() {
 
       {error && <p className="auth-error">{error}</p>}
       {loading && <p className="lede">Loading words…</p>}
-      {!loading && visible.length === 0 && (
+      {!loading && tab === "verbs" && verbCount === 0 && (
+        <p className="lede">
+          No saved verbs yet. New verb saves from Netflix will show up here.
+          Older rows without a part of speech stay in All words.
+        </p>
+      )}
+      {!loading && tab === "all" && visible.length === 0 && (
         <p className="lede">No saved words yet.</p>
       )}
+      {!loading && tab === "verbs" && verbCount > 0 && visible.length === 0 && (
+        <p className="lede">No verbs match that search.</p>
+      )}
 
-      {!loading && visible.length > 0 && (
+      {!loading && tab === "all" && visible.length > 0 && (
         <table className="table">
           <thead>
             <tr>
@@ -120,6 +158,7 @@ export function Words() {
               <th>Translation</th>
               <th>Language</th>
               <th>Status</th>
+              <th>Seen</th>
               <th></th>
             </tr>
           </thead>
@@ -132,7 +171,11 @@ export function Words() {
                 <td>
                   <select
                     className={"status status-" + item.learning_status}
-                    value={item.learning_status}
+                    value={
+                      item.learning_status === "learned"
+                        ? "mastered"
+                        : item.learning_status
+                    }
                     onChange={(event) => onStatus(item.id, event.target.value)}
                   >
                     {STATUSES.map((status) => (
@@ -142,6 +185,7 @@ export function Words() {
                     ))}
                   </select>
                 </td>
+                <td>{item.times_seen || 1}</td>
                 <td>
                   <button
                     type="button"
@@ -155,6 +199,46 @@ export function Words() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {!loading && tab === "verbs" && visible.length > 0 && (
+        <ul className="verb-list">
+          {visible.map((item) => {
+            const open = openVerb === item.id;
+            const present = conjugatePresent(item.word);
+            return (
+              <li key={item.id} className="verb-card">
+                <div className="verb-head">
+                  <div>
+                    <p className="word">{item.word}</p>
+                    <p className="meaning">{item.translation}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="verb-toggle"
+                    onClick={() =>
+                      setOpenVerb(open ? "" : item.id)
+                    }
+                  >
+                    {open ? "Hide present" : "Present tense"}
+                  </button>
+                </div>
+                {open && (
+                  <table className="table conj-table">
+                    <tbody>
+                      {present.persons.map((person) => (
+                        <tr key={person.id}>
+                          <th>{person.label}</th>
+                          <td>{person.form}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );

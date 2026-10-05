@@ -1,11 +1,9 @@
-# Secrets and local env — never ship these in the extension
+# Secrets and local env — never commit these
 .env
-.env.local
-web/.env
-web/.env.local
-server/.env
-src/supabase/public-config.js
-node_modules/
-/package-lock.json
-web/dist
+.env.*
+!.env.example
+!**/.env.example
 .DS_Store
+node_modules/
+web/dist
+src/supabase/public-config.js

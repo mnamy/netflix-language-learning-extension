@@ -1,4 +1,4 @@
-// Opens the local My Words page from the toolbar button.
+# Opens the account hub from the toolbar button.
 
 chrome.action.onClicked.addListener(function () {
   chrome.tabs.create({

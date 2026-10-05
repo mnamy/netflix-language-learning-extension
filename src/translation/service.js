@@ -1,10 +1,15 @@
-// Translation client. The extension only talks to our local Groq proxy.
-// Swap this module later to change providers. Never put API keys here.
+// Translation client. Talks only to our backend. Never put API keys here.
+// The user authenticates with their Supabase access token.
 
 globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
 (function () {
-  const PROXY_URL = "http://127.0.0.1:8787";
+  function translateUrl() {
+    const pub = globalThis.NetflixLanguage.supabasePublic || {};
+    return String(pub.translateUrl || "http://127.0.0.1:8787/translate")
+      .trim()
+      .replace(/\/$/, "");
+  }
 
   globalThis.NetflixLanguage.translateInContext = async function (details) {
     const word = String((details && details.word) || "").trim();
@@ -14,9 +19,18 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       throw new Error("Missing word or sentence");
     }
 
-    const response = await fetch(PROXY_URL + "/translate", {
+    const getToken = globalThis.NetflixLanguage.getAccessToken;
+    const accessToken = getToken ? await getToken() : "";
+    if (!accessToken) {
+      throw new Error("Sign in to translate words.");
+    }
+
+    const response = await fetch(translateUrl(), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + accessToken,
+      },
       body: JSON.stringify({ word: word, sentence: sentence }),
     });
 
@@ -31,6 +45,12 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       throw new Error(data.error || "Translation failed");
     }
 
-    return { translation: String(data.translation).trim() };
+    return {
+      clicked_form: String(data.clicked_form || word).trim(),
+      lemma: String(data.lemma || word).trim(),
+      part_of_speech: String(data.part_of_speech || "").trim(),
+      translation: String(data.translation).trim(),
+      display_word: String(data.display_word || data.lemma || word).trim(),
+    };
   };
 })();

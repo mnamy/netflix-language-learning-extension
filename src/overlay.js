@@ -20,8 +20,13 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       pointer-events: none;
       text-align: center;
       color: #fff;
-      text-shadow: 0 0 0.15em #000, 0 0 0.4em #000;
-      line-height: 1.25;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      text-shadow:
+        0 1px 1px rgba(0, 0, 0, 0.9),
+        0 0 0.35em rgba(0, 0, 0, 0.85),
+        0 0 0.7em rgba(0, 0, 0, 0.55);
+      line-height: 1.35;
       user-select: none;
     }
     .nflx-lang-overlay[hidden] {
@@ -33,21 +38,30 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     }
     .nflx-lang-word {
       pointer-events: auto;
-      margin: 0;
-      padding: 0 0.04em;
+      margin: 0 0.02em;
+      padding: 0.12em 0.16em;
+      min-height: 1.5em;
       border: none;
       background: transparent;
       color: inherit;
       font: inherit;
+      font-weight: inherit;
       line-height: inherit;
       text-shadow: inherit;
       cursor: pointer;
-      border-radius: 0.12em;
+      border-radius: 0.22em;
     }
-    .nflx-lang-word:hover,
+    .nflx-lang-word:hover {
+      background: rgba(229, 9, 20, 0.38);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+    }
     .nflx-lang-word:focus-visible {
-      background: rgba(255, 255, 255, 0.22);
-      outline: none;
+      background: rgba(229, 9, 20, 0.45);
+      outline: 2px solid #fff;
+      outline-offset: 2px;
+    }
+    .nflx-lang-word.is-open {
+      background: rgba(229, 9, 20, 0.55);
     }
   `;
 
@@ -81,11 +95,20 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       event.stopPropagation();
     }
 
+    function clearOpenWord() {
+      const open = root.querySelectorAll(".nflx-lang-word.is-open");
+      for (let i = 0; i < open.length; i++) {
+        open[i].classList.remove("is-open");
+      }
+    }
+
     function onWordClickEvent(event) {
       stopPlayerClick(event);
       const raw = event.currentTarget.getAttribute("data-word") || "";
       const word = globalThis.NetflixLanguage.normalizeClickedWord(raw);
       if (word && onWordClick) {
+        clearOpenWord();
+        event.currentTarget.classList.add("is-open");
         onWordClick(word, event.currentTarget);
       }
     }
@@ -112,6 +135,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
           button.type = "button";
           button.className = "nflx-lang-word";
           button.setAttribute("data-word", part.word || part.value);
+          button.setAttribute("aria-label", "Look up " + (part.word || part.value));
           button.textContent = part.value;
           button.addEventListener("click", onWordClickEvent);
           button.addEventListener("mousedown", stopPlayerClick);
@@ -124,15 +148,17 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
     // Native Netflix captions are often small. Scale up so words are
     // readable and still sit on the caption baseline.
-    const FONT_SCALE = 1.5;
+    const FONT_SCALE = 1.55;
+    const CONTROL_GUTTER = 104;
 
     function applyLayout(layout) {
       if (!layout) {
-        root.style.top = "78%";
+        root.style.top = "auto";
+        root.style.bottom = CONTROL_GUTTER + "px";
         root.style.left = "8%";
         root.style.width = "84%";
         root.style.height = "auto";
-        root.style.fontSize = "2.4rem";
+        root.style.fontSize = "2.5rem";
         root.style.fontFamily = "sans-serif";
         return;
       }
@@ -140,15 +166,18 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       const nativeFont = parseFloat(layout.fontSize) || 24;
       const fontSize = nativeFont * FONT_SCALE;
       const width = Math.min(
-        window.innerWidth * 0.92,
-        Math.max(layout.width * 1.25, layout.width)
+        window.innerWidth * 0.9,
+        Math.max(layout.width * 1.2, layout.width)
       );
-      const height = Math.max(layout.height * FONT_SCALE, fontSize * 1.35);
+      const height = Math.max(layout.height * FONT_SCALE, fontSize * 1.55);
       const left = layout.left + layout.width / 2 - width / 2;
-      const top = layout.top + layout.height - height;
+      let top = layout.top + layout.height - height;
+      const maxTop = window.innerHeight - height - CONTROL_GUTTER;
+      top = Math.min(Math.max(12, top), Math.max(12, maxTop));
 
-      root.style.top = Math.max(0, top) + "px";
-      root.style.left = Math.max(8, left) + "px";
+      root.style.bottom = "auto";
+      root.style.top = top + "px";
+      root.style.left = Math.max(12, left) + "px";
       root.style.width = width + "px";
       root.style.height = height + "px";
       root.style.fontSize = fontSize + "px";
@@ -162,6 +191,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     }
 
     return {
+      clearOpenWord: clearOpenWord,
       sync: function (text, layout) {
         if (!text) {
           renderedText = "";

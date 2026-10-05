@@ -6,7 +6,8 @@
   "permissions": ["storage", "identity"],
   "host_permissions": [
     "http://127.0.0.1:8787/*",
-    "https://*.supabase.co/*"
+    "https://*.supabase.co/*",
+    "https://*.vercel.app/*"
   ],
   "action": {
     "default_title": "My Words"
@@ -24,6 +25,7 @@
         "src/adapters/netflix.js",
         "src/words.js",
         "src/supabase/public-config.js",
+        "src/storage/dedupe.js",
         "src/supabase/client.js",
         "src/storage/words.js",
         "src/translation/service.js",

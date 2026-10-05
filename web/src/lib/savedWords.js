@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 
 const COLUMNS =
-  "id, word, translation, source_language, source, learning_status, created_at";
+  "id, word, translation, source_language, source, learning_status, created_at, times_seen, last_seen_at, part_of_speech";
 
 function requireClient() {
   if (!supabase) {

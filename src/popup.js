@@ -5,77 +5,94 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
 (function () {
   const STYLE_ID = "nflx-lang-popup-style";
-  const GAP = 10;
-  const VIEW_PAD = 12;
-  const CONTROL_GUTTER = 88;
+  const GAP = 12;
+  const VIEW_PAD = 16;
+  const CONTROL_GUTTER = 108;
 
   const css = `
     .nflx-lang-popup {
       position: fixed;
       z-index: 2147483647;
       box-sizing: border-box;
-      min-width: 196px;
-      max-width: 280px;
-      padding: 14px 16px 12px;
-      border-radius: 12px;
-      background: rgba(18, 18, 18, 0.96);
+      min-width: 220px;
+      max-width: 300px;
+      padding: 16px 16px 14px;
+      border-radius: 14px;
+      background: rgba(20, 20, 20, 0.96);
       color: #fff;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       pointer-events: auto;
     }
     .nflx-lang-popup[hidden] {
       display: none !important;
     }
+    .nflx-lang-popup:focus {
+      outline: none;
+    }
     .nflx-lang-popup-close {
       position: absolute;
-      top: 6px;
-      right: 6px;
-      width: 28px;
-      height: 28px;
+      top: 8px;
+      right: 8px;
+      width: 32px;
+      height: 32px;
       border: none;
       border-radius: 8px;
       background: transparent;
       color: rgba(255, 255, 255, 0.72);
-      font-size: 18px;
+      font-size: 20px;
       line-height: 1;
       cursor: pointer;
     }
     .nflx-lang-popup-close:hover,
     .nflx-lang-popup-close:focus-visible {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.12);
       color: #fff;
-      outline: none;
+    }
+    .nflx-lang-popup-close:focus-visible,
+    .nflx-lang-popup-retry:focus-visible,
+    .nflx-lang-popup-save:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: 2px;
     }
     .nflx-lang-popup-word {
-      margin: 0 28px 6px 0;
-      font-size: 18px;
-      font-weight: 650;
+      margin: 0 36px 4px 0;
+      font-size: 20px;
+      font-weight: 700;
       line-height: 1.25;
       word-break: break-word;
+    }
+    .nflx-lang-popup-lemma {
+      margin: 0 36px 8px 0;
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .nflx-lang-popup-lemma[hidden] {
+      display: none !important;
     }
     .nflx-lang-popup-status {
       display: flex;
       align-items: flex-start;
       gap: 8px;
-      margin: 0 0 10px;
-      font-size: 13px;
-      line-height: 1.35;
-      color: rgba(255, 255, 255, 0.72);
-      min-height: 1.35em;
+      margin: 0 0 12px;
+      font-size: 14px;
+      line-height: 1.4;
+      color: rgba(255, 255, 255, 0.74);
+      min-height: 1.4em;
     }
     .nflx-lang-popup-status.is-loading {
       color: rgba(255, 255, 255, 0.5);
     }
     .nflx-lang-popup-status.is-error {
-      color: #ff8a80;
+      color: #ffb4ab;
     }
     .nflx-lang-popup-spinner {
       flex: 0 0 auto;
       width: 12px;
       height: 12px;
-      margin-top: 3px;
+      margin-top: 4px;
       border: 2px solid rgba(255, 255, 255, 0.2);
       border-top-color: #fff;
       border-radius: 50%;
@@ -96,8 +113,8 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      height: 32px;
-      padding: 0 12px;
+      min-height: 36px;
+      padding: 0 14px;
       border: none;
       border-radius: 8px;
       font-size: 13px;
@@ -112,7 +129,6 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     .nflx-lang-popup-retry:hover,
     .nflx-lang-popup-retry:focus-visible {
       background: rgba(255, 255, 255, 0.16);
-      outline: none;
     }
     .nflx-lang-popup-retry[hidden] {
       display: none !important;
@@ -126,7 +142,6 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     .nflx-lang-popup-save:hover:not(:disabled),
     .nflx-lang-popup-save:focus-visible:not(:disabled) {
       background: #f6121d;
-      outline: none;
     }
     .nflx-lang-popup-save:disabled {
       background: rgba(229, 9, 20, 0.35);
@@ -165,10 +180,12 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
     let top = wordRect.top - popupRect.height - GAP;
     if (top < VIEW_PAD) {
-      top = Math.min(wordRect.bottom + GAP, Math.max(VIEW_PAD, maxTop));
-    } else {
-      top = Math.min(top, Math.max(VIEW_PAD, maxTop));
+      const below = wordRect.bottom + GAP;
+      top = below + popupRect.height < window.innerHeight - CONTROL_GUTTER
+        ? below
+        : Math.max(VIEW_PAD, maxTop);
     }
+    top = Math.min(top, Math.max(VIEW_PAD, maxTop));
 
     el.style.left = left + "px";
     el.style.top = top + "px";
@@ -180,7 +197,9 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     const root = document.createElement("div");
     root.className = "nflx-lang-popup";
     root.hidden = true;
+    root.tabIndex = -1;
     root.setAttribute("role", "dialog");
+    root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-label", "Word translation");
 
     const closeBtn = document.createElement("button");
@@ -192,6 +211,10 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     const wordEl = document.createElement("p");
     wordEl.className = "nflx-lang-popup-word";
 
+    const lemmaEl = document.createElement("p");
+    lemmaEl.className = "nflx-lang-popup-lemma";
+    lemmaEl.hidden = true;
+
     const statusEl = document.createElement("div");
     statusEl.className = "nflx-lang-popup-status";
 
@@ -202,6 +225,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     const messageEl = document.createElement("p");
     messageEl.className = "nflx-lang-popup-meaning";
     messageEl.style.margin = "0";
+    messageEl.setAttribute("aria-live", "polite");
 
     statusEl.append(spinnerEl, messageEl);
 
@@ -221,20 +245,24 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     saveBtn.disabled = true;
 
     actions.append(retryBtn, saveBtn);
-    root.append(closeBtn, wordEl, statusEl, actions);
+    root.append(closeBtn, wordEl, lemmaEl, statusEl, actions);
     document.documentElement.appendChild(root);
 
     let anchorEl = null;
     let onRetry = null;
     let onSave = null;
+    let onHide = null;
     let currentWord = "";
+    let currentLemma = "";
     let currentTranslation = "";
-    let currentSource = "netflix";
+    let currentPos = "";
     let saving = false;
     let hideTimer = 0;
 
-    const AUTO_HIDE_MS = 4000;
-    const SAVED_HIDE_MS = 700;
+    const AUTO_HIDE_MS = 4500;
+    const SAVED_HIDE_MS = 900;
+    let hideAfter = 0;
+    let hidePaused = false;
 
     function clearHideTimer() {
       if (hideTimer) {
@@ -244,11 +272,27 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     }
 
     function scheduleHide(ms) {
+      hideAfter = Date.now() + ms;
       clearHideTimer();
+      if (hidePaused) {
+        return;
+      }
       hideTimer = window.setTimeout(function () {
         hideTimer = 0;
         hide();
       }, ms);
+    }
+
+    function pauseHide() {
+      hidePaused = true;
+      clearHideTimer();
+    }
+
+    function resumeHide() {
+      hidePaused = false;
+      if (!root.hidden && hideAfter > Date.now()) {
+        scheduleHide(hideAfter - Date.now());
+      }
     }
 
     function resetSaveButton() {
@@ -260,6 +304,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       saveBtn.textContent = "Saved";
       saveBtn.classList.add("is-saved");
       saveBtn.disabled = true;
+      saveBtn.setAttribute("aria-disabled", "true");
     }
 
     function render(kind, text) {
@@ -271,6 +316,10 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
         currentTranslation = text;
       } else if (loading || error) {
         currentTranslation = "";
+        currentLemma = "";
+        currentPos = "";
+        lemmaEl.hidden = true;
+        lemmaEl.textContent = "";
         resetSaveButton();
       }
 
@@ -281,18 +330,30 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       retryBtn.hidden = !error;
       if (!saveBtn.classList.contains("is-saved")) {
         saveBtn.disabled = !ready || saving;
+        saveBtn.setAttribute("aria-disabled", saveBtn.disabled ? "true" : "false");
       }
-      placePopup(root, anchorEl);
+      window.requestAnimationFrame(function () {
+        placePopup(root, anchorEl);
+      });
     }
 
     function hide() {
+      const hideCb = onHide;
       clearHideTimer();
       root.hidden = true;
       onRetry = null;
+      onHide = null;
       currentWord = "";
+      currentLemma = "";
+      currentPos = "";
       currentTranslation = "";
+      lemmaEl.hidden = true;
+      lemmaEl.textContent = "";
       saving = false;
       resetSaveButton();
+      if (hideCb) {
+        hideCb();
+      }
     }
 
     function show(details) {
@@ -304,27 +365,45 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
       wordEl.textContent = word;
       currentWord = word;
+      currentLemma = "";
+      currentPos = "";
       currentTranslation = "";
+      lemmaEl.hidden = true;
+      lemmaEl.textContent = "";
       currentSource = (details && details.source) || "netflix";
       anchorEl = nextAnchor;
       onRetry = details.onRetry || null;
       onSave = details.onSave || null;
+      onHide = details.onHide || null;
       saving = false;
       resetSaveButton();
       clearHideTimer();
       root.hidden = false;
       render("loading", "Translating…");
+      root.focus({ preventScroll: true });
     }
 
-    function setLoading() {
-      render("loading", "Translating…");
-    }
-
-    function setTranslation(text) {
-      const translation = String(text || "").trim();
-      if (!translation) {
+    function setTranslation(details) {
+      const data =
+        details && typeof details === "object" ? details : { translation: details };
+      const translation = String(data.translation || "").trim();
+      const lemma = String(data.lemma || currentWord || "").trim();
+      const clicked = String(data.clicked_form || currentWord || "").trim();
+      const display = String(data.display_word || lemma || clicked).trim();
+      if (!translation || !lemma) {
         render("error", "No translation returned");
         return;
+      }
+      currentWord = clicked || currentWord;
+      currentLemma = lemma;
+      currentPos = String(data.part_of_speech || "").trim().toLowerCase();
+      wordEl.textContent = display || lemma;
+      if (lemma && clicked && lemma.toLowerCase() !== clicked.toLowerCase()) {
+        lemmaEl.hidden = false;
+        lemmaEl.textContent = "Clicked “" + clicked + "” · save as " + lemma;
+      } else {
+        lemmaEl.hidden = true;
+        lemmaEl.textContent = "";
       }
       render("ready", translation);
       scheduleHide(AUTO_HIDE_MS);
@@ -370,7 +449,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     saveBtn.addEventListener("click", function (event) {
       event.preventDefault();
       stopPlayerClick(event);
-      if (saveBtn.disabled || saving || !currentWord || !currentTranslation) {
+      if (saveBtn.disabled || saving || !currentLemma || !currentTranslation) {
         return;
       }
       if (!onSave) {
@@ -379,10 +458,13 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
       saving = true;
       saveBtn.disabled = true;
+      saveBtn.textContent = "Saving…";
       Promise.resolve(
         onSave({
-          word: currentWord,
+          word: currentLemma,
+          lemma: currentLemma,
           translation: currentTranslation,
+          part_of_speech: currentPos,
           source: currentSource,
         })
       )
@@ -391,26 +473,46 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
           markSaved();
           scheduleHide(SAVED_HIDE_MS);
         })
-        .catch(function () {
+        .catch(function (err) {
           saving = false;
-          saveBtn.disabled = false;
           resetSaveButton();
+          saveBtn.disabled = false;
+          statusEl.classList.add("is-error");
+          messageEl.textContent = (err && err.message) || "Could not save word";
         });
     });
 
     root.addEventListener("mousedown", stopPlayerClick);
     root.addEventListener("click", stopPlayerClick);
+    root.addEventListener("mouseenter", pauseHide);
+    root.addEventListener("mouseleave", resumeHide);
+    root.addEventListener("focusin", pauseHide);
+    root.addEventListener("focusout", function (event) {
+      if (!root.contains(event.relatedTarget)) {
+        resumeHide();
+      }
+    });
     document.addEventListener("pointerdown", onOutsidePointer, true);
     document.addEventListener("keydown", function (event) {
+      if (root.hidden) {
+        return;
+      }
       if (event.key === "Escape") {
+        event.preventDefault();
         hide();
+        return;
+      }
+      if ((event.key === "s" || event.key === "S") && !event.metaKey && !event.ctrlKey) {
+        if (!saveBtn.disabled) {
+          event.preventDefault();
+          saveBtn.click();
+        }
       }
     });
 
     return {
       show: show,
       hide: hide,
-      setLoading: setLoading,
       setTranslation: setTranslation,
       setError: setError,
     };

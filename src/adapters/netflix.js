@@ -160,6 +160,12 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       subtree: true,
     });
 
+    function stop() {
+      documentObserver.disconnect();
+      detachOverlay(false);
+    }
+
+    window.addEventListener("pagehide", stop, { once: true });
     syncOverlay();
   }
 
