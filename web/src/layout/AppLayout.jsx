@@ -1,8 +1,13 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export function AppLayout() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, accessDenied } = useAuth();
+  const location = useLocation();
+
+  if (accessDenied && location.pathname !== "/sign-in") {
+    return <Navigate to="/sign-in" replace />;
+  }
 
   return (
     <div className="app">

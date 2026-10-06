@@ -3,7 +3,8 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export function SignIn() {
-  const { user, configured, signIn, signInWithGoogle } = useAuth();
+  const { user, configured, signIn, signInWithGoogle, accessDenied, clearAccessDenied } =
+    useAuth();
   const location = useLocation();
   const from = location.state?.from || "/";
   const [email, setEmail] = useState("");
@@ -13,6 +14,20 @@ export function SignIn() {
 
   if (user) {
     return <Navigate to={from} replace />;
+  }
+
+  if (accessDenied) {
+    return (
+      <section className="auth">
+        <h1>Oops, looks like you don’t have access right now!</h1>
+        <p className="lede">This version is currently private.</p>
+        <div className="auth-form">
+          <button type="button" onClick={() => clearAccessDenied()}>
+            Try another account
+          </button>
+        </div>
+      </section>
+    );
   }
 
   async function onSubmit(event) {

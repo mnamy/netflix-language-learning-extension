@@ -401,6 +401,14 @@ h1 {
   max-width: 400px;
 }
 
+.auth h1 {
+  line-height: 1.25;
+}
+
+.auth .auth-form {
+  margin-top: 4px;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;

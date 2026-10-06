@@ -7,7 +7,7 @@ globalThis.NetflixLanguage.supabasePublic = {
   url: "https://your-project.supabase.co",
   anonKey: "your-anon-key",
   // Local proxy. Production: https://your-app.vercel.app/api/translate
-  translateUrl: "http://127.0.0.1:8787/translate",
+  translateUrl: "https://your-app.vercel.app/api/translate",
   // Local Vite. Production: https://your-app.vercel.app
-  webAppUrl: "http://localhost:5173",
+  webAppUrl: "https://your-app.vercel.app",
 };
