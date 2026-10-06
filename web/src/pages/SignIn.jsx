@@ -34,12 +34,7 @@ export function SignIn() {
   }
 
   if (!ready) {
-    return (
-      <section className="auth">
-        <h1>Sign in</h1>
-        <p className="lede">Finishing sign-in…</p>
-      </section>
-    );
+    return <p className="lede">Checking sign-in…</p>;
   }
 
   if (user) {
