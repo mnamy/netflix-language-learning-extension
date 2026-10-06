@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { oauthLanding, supabase } from "../lib/supabase";
 
 const AuthContext = createContext(null);
 
@@ -13,12 +13,33 @@ function allowedUserId() {
   return String(import.meta.env.VITE_ALLOWED_USER_ID || "").trim();
 }
 
+function userIdFromJwt(token) {
+  const raw = String(token || "");
+  const parts = raw.split(".");
+  if (parts.length < 2) {
+    return "";
+  }
+  try {
+    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(padded);
+    const payload = JSON.parse(json);
+    return String(payload.sub || "").trim();
+  } catch (err) {
+    return "";
+  }
+}
+
+function identityFromSession(session) {
+  return String(session?.user?.id || userIdFromJwt(session?.access_token) || "").trim();
+}
+
 function sessionIsAllowed(session) {
   const allowed = allowedUserId();
-  if (!allowed || !session?.user?.id) {
+  const identity = identityFromSession(session);
+  if (!allowed || !identity) {
     return true;
   }
-  return session.user.id === allowed;
+  return identity === allowed;
 }
 
 function storageGet(key) {
@@ -51,40 +72,64 @@ function storageSet(key, denied) {
   }
 }
 
-function readAccessDenied() {
-  return storageGet(ACCESS_DENIED_KEY);
-}
-
 function persistAccessDenied(denied) {
   storageSet(ACCESS_DENIED_KEY, denied);
 }
 
-function oauthCallbackError() {
-  const query = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  return (
-    hash.get("error_description") ||
-    query.get("error_description") ||
-    hash.get("error") ||
-    query.get("error") ||
-    ""
-  );
+function isUserCancelledOAuth(landing) {
+  const desc = String(landing.errorDescription || landing.error || "").toLowerCase();
+  return desc.includes("cancel") || desc.includes("dismiss");
 }
 
-function hasOAuthCallbackParams() {
-  const query = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+function isPrivateAccessOAuth(landing) {
+  if (!landing || isUserCancelledOAuth(landing)) {
+    return false;
+  }
+  const code = String(landing.errorCode || "").toLowerCase();
+  const desc = String(landing.errorDescription || "").toLowerCase();
+  const err = String(landing.error || "").toLowerCase();
+  if (
+    code === "signup_disabled" ||
+    code === "user_banned" ||
+    code === "forbidden" ||
+    desc.includes("signup") ||
+    desc.includes("not allowed") ||
+    desc.includes("banned")
+  ) {
+    return true;
+  }
+  const allowed = allowedUserId();
+  const tokenUser = userIdFromJwt(landing.accessToken);
+  if (allowed && tokenUser && tokenUser !== allowed) {
+    return true;
+  }
+  // A completed Google trip that Supabase rejected without a session.
+  if ((err || code || desc) && (landing.code || landing.accessToken || err === "access_denied" || err === "server_error")) {
+    if (err === "access_denied" && !code && !desc) {
+      return false;
+    }
+    if (err === "access_denied" || err === "server_error") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasOAuthCallbackParams(landing) {
   return Boolean(
-    query.get("code") ||
-      query.get("access_token") ||
-      hash.get("access_token") ||
-      query.get("error") ||
-      hash.get("error")
+    landing.code ||
+      landing.accessToken ||
+      landing.error ||
+      landing.errorCode ||
+      landing.errorDescription
   );
 }
 
 function clearOAuthCallbackParams() {
-  if (!hasOAuthCallbackParams()) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!window.location.search && !window.location.hash) {
     return;
   }
   window.history.replaceState({}, "", window.location.pathname);
@@ -95,10 +140,14 @@ function rejectDisallowedSession() {
   clearOAuthCallbackParams();
 }
 
+const landingDenied = isPrivateAccessOAuth(oauthLanding);
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(!supabase);
-  const [accessDenied, setAccessDenied] = useState(readAccessDenied);
+  const [accessDenied, setAccessDenied] = useState(
+    () => storageGet(ACCESS_DENIED_KEY) || landingDenied
+  );
 
   useEffect(() => {
     if (!supabase) {
@@ -131,15 +180,19 @@ export function AuthProvider({ children }) {
       }, 0);
     }
 
+    if (landingDenied) {
+      markAccessDenied();
+    }
+
     function applySession(next) {
       if (ignore) {
         return;
       }
-      if (next?.user?.id && !sessionIsAllowed(next)) {
+      if (next && !sessionIsAllowed(next)) {
         markAccessDenied();
         return;
       }
-      if (next?.user?.id) {
+      if (identityFromSession(next)) {
         persistAccessDenied(false);
         setAccessDenied(false);
         clearOAuthCallbackParams();
@@ -147,9 +200,13 @@ export function AuthProvider({ children }) {
         setReady(true);
         return;
       }
+      if (isPrivateAccessOAuth(oauthLanding)) {
+        markAccessDenied();
+        return;
+      }
       setSession(null);
-      if (oauthCallbackError() || !hasOAuthCallbackParams()) {
-        if (oauthCallbackError()) {
+      if (isUserCancelledOAuth(oauthLanding) || !hasOAuthCallbackParams(oauthLanding)) {
+        if (isUserCancelledOAuth(oauthLanding)) {
           clearOAuthCallbackParams();
         }
         setReady(true);
@@ -188,6 +245,13 @@ export function AuthProvider({ children }) {
         }
         return supabase.auth.signInWithPassword({ email, password }).then((result) => {
           if (result.error) {
+            const message = String(result.error.message || "").toLowerCase();
+            if (message.includes("signup") || message.includes("not allowed")) {
+              rejectDisallowedSession();
+              setAccessDenied(true);
+              setSession(null);
+              return { data: { session: null, user: null }, error: null };
+            }
             return result;
           }
           if (result.data?.session && !sessionIsAllowed(result.data.session)) {
@@ -227,6 +291,12 @@ export function AuthProvider({ children }) {
           })
           .then((result) => {
             if (result.error) {
+              const message = String(result.error.message || "").toLowerCase();
+              if (message.includes("signup") || message.includes("not allowed")) {
+                rejectDisallowedSession();
+                setAccessDenied(true);
+                return { data: result.data, error: null };
+              }
               return result;
             }
             if (result.data?.url) {

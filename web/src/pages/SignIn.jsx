@@ -19,15 +19,6 @@ export function SignIn() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (!ready) {
-    return (
-      <section className="auth">
-        <h1>Sign in</h1>
-        <p className="lede">Finishing sign-in…</p>
-      </section>
-    );
-  }
-
   if (accessDenied) {
     return (
       <section className="auth">
@@ -38,6 +29,15 @@ export function SignIn() {
             Try another account
           </button>
         </div>
+      </section>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <section className="auth">
+        <h1>Sign in</h1>
+        <p className="lede">Finishing sign-in…</p>
       </section>
     );
   }
