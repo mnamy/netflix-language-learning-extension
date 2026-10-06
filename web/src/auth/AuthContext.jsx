@@ -3,16 +3,9 @@ import { supabase } from "../lib/supabase";
 
 const AuthContext = createContext(null);
 
+const ACCESS_DENIED_KEY = "nflxAccessDenied";
+
 function webOAuthRedirectTo() {
-  const fromEnv = String(import.meta.env.VITE_APP_URL || "")
-    .trim()
-    .replace(/\/$/, "");
-  if (fromEnv) {
-    return fromEnv + "/sign-in";
-  }
-  if (import.meta.env.DEV) {
-    return "http://localhost:5173/sign-in";
-  }
   return window.location.origin + "/sign-in";
 }
 
@@ -28,26 +21,78 @@ function sessionIsAllowed(session) {
   return session.user.id === allowed;
 }
 
-const ACCESS_DENIED_KEY = "nflxAccessDenied";
-
-function readAccessDenied() {
+function storageGet(key) {
   try {
-    return sessionStorage.getItem(ACCESS_DENIED_KEY) === "1";
+    if (sessionStorage.getItem(key) === "1") {
+      return true;
+    }
+  } catch (err) {
+    // sessionStorage can be unavailable in some browser modes.
+  }
+  try {
+    return localStorage.getItem(key) === "1";
   } catch (err) {
     return false;
   }
 }
 
-function persistAccessDenied(denied) {
-  try {
-    if (denied) {
-      sessionStorage.setItem(ACCESS_DENIED_KEY, "1");
-    } else {
-      sessionStorage.removeItem(ACCESS_DENIED_KEY);
+function storageSet(key, denied) {
+  const value = denied ? "1" : null;
+  for (const store of [sessionStorage, localStorage]) {
+    try {
+      if (value) {
+        store.setItem(key, value);
+      } else {
+        store.removeItem(key);
+      }
+    } catch (err) {
+      // Ignore storage write failures.
     }
-  } catch (err) {
-    // sessionStorage can be unavailable in some browser modes.
   }
+}
+
+function readAccessDenied() {
+  return storageGet(ACCESS_DENIED_KEY);
+}
+
+function persistAccessDenied(denied) {
+  storageSet(ACCESS_DENIED_KEY, denied);
+}
+
+function oauthCallbackError() {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return (
+    hash.get("error_description") ||
+    query.get("error_description") ||
+    hash.get("error") ||
+    query.get("error") ||
+    ""
+  );
+}
+
+function hasOAuthCallbackParams() {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return Boolean(
+    query.get("code") ||
+      query.get("access_token") ||
+      hash.get("access_token") ||
+      query.get("error") ||
+      hash.get("error")
+  );
+}
+
+function clearOAuthCallbackParams() {
+  if (!hasOAuthCallbackParams()) {
+    return;
+  }
+  window.history.replaceState({}, "", window.location.pathname);
+}
+
+function rejectDisallowedSession() {
+  persistAccessDenied(true);
+  clearOAuthCallbackParams();
 }
 
 export function AuthProvider({ children }) {
@@ -61,50 +106,67 @@ export function AuthProvider({ children }) {
     }
 
     let ignore = false;
+    let pendingSignOut = false;
+
+    const readyTimeout = window.setTimeout(() => {
+      if (!ignore) {
+        setReady(true);
+      }
+    }, 8000);
 
     function markAccessDenied() {
-      persistAccessDenied(true);
-      if (!ignore) {
-        setAccessDenied(true);
-      }
-    }
-
-    function clearDeniedIfAllowedUser(next) {
-      if (next?.user?.id && sessionIsAllowed(next)) {
-        persistAccessDenied(false);
-        if (!ignore) {
-          setAccessDenied(false);
-        }
-      }
-    }
-
-    async function applySession(next) {
-      if (next?.user?.id && !sessionIsAllowed(next)) {
-        markAccessDenied();
-        await supabase.auth.signOut({ scope: "local" });
-        if (!ignore) {
-          setSession(null);
-          setReady(true);
-        }
+      rejectDisallowedSession();
+      setAccessDenied(true);
+      setSession(null);
+      setReady(true);
+      if (pendingSignOut) {
         return;
       }
-      if (!ignore) {
-        clearDeniedIfAllowedUser(next);
-        setSession(next ?? null);
+      pendingSignOut = true;
+      // signOut inside onAuthStateChange can deadlock the supabase-js client.
+      window.setTimeout(() => {
+        supabase.auth.signOut({ scope: "local" }).finally(() => {
+          pendingSignOut = false;
+        });
+      }, 0);
+    }
+
+    function applySession(next) {
+      if (ignore) {
+        return;
+      }
+      if (next?.user?.id && !sessionIsAllowed(next)) {
+        markAccessDenied();
+        return;
+      }
+      if (next?.user?.id) {
+        persistAccessDenied(false);
+        setAccessDenied(false);
+        clearOAuthCallbackParams();
+        setSession(next);
+        setReady(true);
+        return;
+      }
+      setSession(null);
+      if (oauthCallbackError() || !hasOAuthCallbackParams()) {
+        if (oauthCallbackError()) {
+          clearOAuthCallbackParams();
+        }
         setReady(true);
       }
     }
-
-    supabase.auth.getSession().then(({ data }) => {
-      return applySession(data.session ?? null);
-    });
 
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       applySession(next);
     });
 
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      applySession(sessionData.session ?? null);
+    });
+
     return () => {
       ignore = true;
+      window.clearTimeout(readyTimeout);
       data.subscription.unsubscribe();
     };
   }, []);
@@ -129,8 +191,9 @@ export function AuthProvider({ children }) {
             return result;
           }
           if (result.data?.session && !sessionIsAllowed(result.data.session)) {
-            persistAccessDenied(true);
+            rejectDisallowedSession();
             setAccessDenied(true);
+            setSession(null);
             return supabase.auth.signOut({ scope: "local" }).then(() => ({
               data: { session: null, user: null },
               error: null,
@@ -151,13 +214,26 @@ export function AuthProvider({ children }) {
         if (!supabase) {
           return Promise.reject(new Error("Supabase is not configured."));
         }
-        return supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: webOAuthRedirectTo(),
-            queryParams: { prompt: "select_account" },
-          },
-        });
+        persistAccessDenied(false);
+        setAccessDenied(false);
+        return supabase.auth
+          .signInWithOAuth({
+            provider: "google",
+            options: {
+              redirectTo: webOAuthRedirectTo(),
+              queryParams: { prompt: "select_account" },
+              skipBrowserRedirect: true,
+            },
+          })
+          .then((result) => {
+            if (result.error) {
+              return result;
+            }
+            if (result.data?.url) {
+              window.location.assign(result.data.url);
+            }
+            return result;
+          });
       },
     }),
     [ready, session, accessDenied]

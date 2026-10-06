@@ -3,17 +3,29 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export function SignIn() {
-  const { user, configured, signIn, signInWithGoogle, accessDenied, clearAccessDenied } =
-    useAuth();
+  const {
+    ready,
+    user,
+    configured,
+    signIn,
+    signInWithGoogle,
+    accessDenied,
+    clearAccessDenied,
+  } = useAuth();
   const location = useLocation();
-  const from = location.state?.from || "/";
+  const from = location.state?.from && location.state.from !== "/sign-in" ? location.state.from : "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) {
-    return <Navigate to={from} replace />;
+  if (!ready) {
+    return (
+      <section className="auth">
+        <h1>Sign in</h1>
+        <p className="lede">Finishing sign-in…</p>
+      </section>
+    );
   }
 
   if (accessDenied) {
@@ -28,6 +40,10 @@ export function SignIn() {
         </div>
       </section>
     );
+  }
+
+  if (user) {
+    return <Navigate to={from} replace />;
   }
 
   async function onSubmit(event) {
@@ -92,8 +108,8 @@ export function SignIn() {
           const { error: nextError } = await signInWithGoogle().catch((err) => ({
             error: err,
           }));
-          setBusy(false);
           if (nextError) {
+            setBusy(false);
             setError(nextError.message || "Google sign-in failed");
           }
         }}
