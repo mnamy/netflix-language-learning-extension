@@ -15,7 +15,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       z-index: 2147483647;
       box-sizing: border-box;
       min-width: 220px;
-      max-width: 300px;
+      max-width: 320px;
       padding: 16px 16px 14px;
       border-radius: 14px;
       background: rgba(20, 20, 20, 0.96);
@@ -70,6 +70,15 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       color: rgba(255, 255, 255, 0.5);
     }
     .nflx-lang-popup-lemma[hidden] {
+      display: none !important;
+    }
+    .nflx-lang-popup-context {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: rgba(255, 255, 255, 0.62);
+    }
+    .nflx-lang-popup-context[hidden] {
       display: none !important;
     }
     .nflx-lang-popup-status {
@@ -229,6 +238,10 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
 
     statusEl.append(spinnerEl, messageEl);
 
+    const contextEl = document.createElement("p");
+    contextEl.className = "nflx-lang-popup-context";
+    contextEl.hidden = true;
+
     const actions = document.createElement("div");
     actions.className = "nflx-lang-popup-actions";
 
@@ -245,7 +258,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
     saveBtn.disabled = true;
 
     actions.append(retryBtn, saveBtn);
-    root.append(closeBtn, wordEl, lemmaEl, statusEl, actions);
+    root.append(closeBtn, wordEl, lemmaEl, statusEl, contextEl, actions);
     document.documentElement.appendChild(root);
 
     let anchorEl = null;
@@ -312,14 +325,14 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       const error = kind === "error";
       const ready = kind === "ready" && Boolean(text);
 
-      if (ready) {
-        currentTranslation = text;
-      } else if (loading || error) {
+      if (loading || error) {
         currentTranslation = "";
         currentLemma = "";
         currentPos = "";
         lemmaEl.hidden = true;
         lemmaEl.textContent = "";
+        contextEl.hidden = true;
+        contextEl.textContent = "";
         resetSaveButton();
       }
 
@@ -349,6 +362,8 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       currentTranslation = "";
       lemmaEl.hidden = true;
       lemmaEl.textContent = "";
+      contextEl.hidden = true;
+      contextEl.textContent = "";
       saving = false;
       resetSaveButton();
       if (hideCb) {
@@ -370,6 +385,8 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       currentTranslation = "";
       lemmaEl.hidden = true;
       lemmaEl.textContent = "";
+      contextEl.hidden = true;
+      contextEl.textContent = "";
       currentSource = (details && details.source) || "netflix";
       anchorEl = nextAnchor;
       onRetry = details.onRetry || null;
@@ -383,19 +400,34 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       root.focus({ preventScroll: true });
     }
 
+    function glossKey(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+    }
+
     function setTranslation(details) {
       const data =
         details && typeof details === "object" ? details : { translation: details };
-      const translation = String(data.translation || "").trim();
+      const canonical = String(
+        data.canonical_translation || data.translation || ""
+      ).trim();
+      const contextual = String(
+        data.contextual_meaning || data.contextual_translation || ""
+      ).trim();
       const lemma = String(data.lemma || currentWord || "").trim();
       const clicked = String(data.clicked_form || currentWord || "").trim();
       const display = String(data.display_word || lemma || clicked).trim();
-      if (!translation || !lemma) {
+      const idiomatic = Boolean(data.is_idiomatic);
+      const idiom = String(data.idiom_or_expression || "").trim();
+      if (!canonical || !lemma) {
         render("error", "No translation returned");
         return;
       }
       currentWord = clicked || currentWord;
       currentLemma = lemma;
+      currentTranslation = canonical;
       currentPos = String(data.part_of_speech || "").trim().toLowerCase();
       wordEl.textContent = display || lemma;
       if (lemma && clicked && lemma.toLowerCase() !== clicked.toLowerCase()) {
@@ -405,8 +437,31 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
         lemmaEl.hidden = true;
         lemmaEl.textContent = "";
       }
-      render("ready", translation);
-      scheduleHide(AUTO_HIDE_MS);
+
+      const contextDiffers =
+        Boolean(contextual) && glossKey(contextual) !== glossKey(canonical);
+      if (idiomatic) {
+        render("ready", contextual || canonical);
+        const extra = [];
+        if (idiom) {
+          extra.push("Idiom: " + idiom);
+        }
+        extra.push("Saved as " + lemma + " · " + canonical);
+        contextEl.hidden = false;
+        contextEl.textContent = extra.join(" · ");
+      } else if (contextDiffers) {
+        render("ready", canonical);
+        contextEl.hidden = false;
+        contextEl.textContent = "In this line: " + contextual;
+      } else {
+        render("ready", canonical);
+        contextEl.hidden = true;
+        contextEl.textContent = "";
+      }
+      window.requestAnimationFrame(function () {
+        placePopup(root, anchorEl);
+      });
+      scheduleHide(idiomatic || contextDiffers ? 7000 : AUTO_HIDE_MS);
     }
 
     function setError(text) {

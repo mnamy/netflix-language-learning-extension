@@ -41,10 +41,16 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       data = {};
     }
 
-    const translation = String(
-      data.contextual_translation || data.translation || ""
+    const canonical = String(
+      data.canonical_translation || data.translation || ""
     ).trim();
-    if (!response.ok || !translation) {
+    const contextual = String(
+      data.contextual_meaning ||
+        data.contextual_translation ||
+        canonical ||
+        ""
+    ).trim();
+    if (!response.ok || !canonical) {
       throw new Error(data.error || "Translation failed");
     }
 
@@ -52,8 +58,12 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       clicked_form: String(data.clicked_form || word).trim(),
       lemma: String(data.lemma || word).trim(),
       part_of_speech: String(data.part_of_speech || "").trim(),
-      contextual_translation: translation,
-      translation: translation,
+      canonical_translation: canonical,
+      contextual_meaning: contextual,
+      is_idiomatic: Boolean(data.is_idiomatic),
+      idiom_or_expression: String(data.idiom_or_expression || "").trim(),
+      contextual_translation: contextual,
+      translation: canonical,
       display_word: String(data.display_word || data.lemma || word).trim(),
     };
   };
