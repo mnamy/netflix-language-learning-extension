@@ -1,7 +1,8 @@
 import { supabase } from "./supabase";
+import { patchForManualStatus } from "./reviewSchedule";
 
 const COLUMNS =
-  "id, word, translation, source_language, source, learning_status, created_at, times_seen, last_seen_at, part_of_speech";
+  "id, word, translation, source_language, source, learning_status, created_at, times_seen, last_seen_at, part_of_speech, next_review_at, review_interval_days, successful_reviews";
 
 function requireClient() {
   if (!supabase) {
@@ -25,7 +26,18 @@ export async function fetchSavedWords() {
 export async function updateLearningStatus(id, learningStatus) {
   const { error } = await requireClient()
     .from("saved_words")
-    .update({ learning_status: learningStatus })
+    .update(patchForManualStatus(learningStatus))
+    .eq("id", id);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateReviewProgress(id, patch) {
+  const { error } = await requireClient()
+    .from("saved_words")
+    .update(patch)
     .eq("id", id);
 
   if (error) {

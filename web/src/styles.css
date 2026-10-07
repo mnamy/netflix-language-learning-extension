@@ -130,7 +130,8 @@ h1 {
   gap: 10px;
 }
 
-.actions a {
+.actions a,
+.actions .text-action {
   display: inline-flex;
   align-items: center;
   min-height: 40px;
@@ -138,12 +139,20 @@ h1 {
   background: #e50914;
   color: #fff;
   text-decoration: none;
+  border: none;
   border-radius: 10px;
+  font: inherit;
   font-weight: 650;
+  cursor: pointer;
 }
 
-.actions a:last-child {
+.actions a:last-child,
+.actions .text-action:last-child {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.review .actions {
+  margin: 0 0 16px;
 }
 
 .table {

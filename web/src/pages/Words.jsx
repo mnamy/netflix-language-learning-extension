@@ -5,6 +5,7 @@ import {
   updateLearningStatus,
 } from "../lib/savedWords";
 import { conjugatePresent } from "../lib/spanishPresent";
+import { patchForManualStatus } from "../lib/reviewSchedule";
 
 const STATUSES = ["new", "learning", "mastered"];
 
@@ -67,7 +68,7 @@ export function Words() {
     const previous = words;
     setWords((list) =>
       list.map((item) =>
-        item.id === id ? { ...item, learning_status: status } : item
+        item.id === id ? { ...item, ...patchForManualStatus(status) } : item
       )
     );
     try {

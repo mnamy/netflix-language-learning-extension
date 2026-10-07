@@ -266,7 +266,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
   };
 
   const ACCOUNT_COLUMNS =
-    "id,word,translation,source_language,source,learning_status,created_at,times_seen,last_seen_at,part_of_speech";
+    "id,word,translation,source_language,source,learning_status,created_at,times_seen,last_seen_at,part_of_speech,next_review_at,review_interval_days,successful_reviews";
 
   async function accountHeaders() {
     const session = await getSession();
@@ -347,6 +347,17 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
         patch.times_seen = Number(existing.times_seen || 1) + 1;
         patch.last_seen_at = new Date().toISOString();
       }
+      const status =
+        existing.learning_status === "learned"
+          ? "mastered"
+          : existing.learning_status || "new";
+      const reopened = bumpSeen && status === "mastered";
+      if (reopened) {
+        patch.learning_status = "learning";
+        patch.successful_reviews = 0;
+        patch.review_interval_days = 1;
+        patch.next_review_at = new Date().toISOString();
+      }
       if (bumpSeen || translation !== existing.translation || patch.part_of_speech) {
         await patchAccountWord(auth.headers, auth.cfg, existing.id, patch);
       }
@@ -354,6 +365,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
         saved: true,
         synced: true,
         duplicate: true,
+        reopened: reopened,
         times_seen: bumpSeen ? patch.times_seen : Number(existing.times_seen || 1),
       };
     }
@@ -365,6 +377,10 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       source: entry.source || "netflix",
       times_seen: 1,
       last_seen_at: new Date().toISOString(),
+      learning_status: "new",
+      successful_reviews: 0,
+      review_interval_days: 0,
+      next_review_at: new Date().toISOString(),
     };
     if (entry.sourceLanguage) {
       row.source_language = entry.sourceLanguage;
@@ -391,6 +407,17 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
           patch.times_seen = Number(raced.times_seen || 1) + 1;
           patch.last_seen_at = new Date().toISOString();
         }
+        const status =
+          raced.learning_status === "learned"
+            ? "mastered"
+            : raced.learning_status || "new";
+        const reopened = bumpSeen && status === "mastered";
+        if (reopened) {
+          patch.learning_status = "learning";
+          patch.successful_reviews = 0;
+          patch.review_interval_days = 1;
+          patch.next_review_at = new Date().toISOString();
+        }
         if (bumpSeen || translation !== raced.translation || patch.part_of_speech) {
           await patchAccountWord(auth.headers, auth.cfg, raced.id, patch);
         }
@@ -398,6 +425,7 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
           saved: true,
           synced: true,
           duplicate: true,
+          reopened: reopened,
           times_seen: bumpSeen ? patch.times_seen : Number(raced.times_seen || 1),
         };
       }

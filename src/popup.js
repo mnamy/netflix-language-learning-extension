@@ -300,8 +300,8 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
       saveBtn.classList.remove("is-saved");
     }
 
-    function markSaved() {
-      saveBtn.textContent = "Saved";
+    function markSaved(label) {
+      saveBtn.textContent = label || "Saved";
       saveBtn.classList.add("is-saved");
       saveBtn.disabled = true;
       saveBtn.setAttribute("aria-disabled", "true");
@@ -468,10 +468,13 @@ globalThis.NetflixLanguage = globalThis.NetflixLanguage || {};
           source: currentSource,
         })
       )
-        .then(function () {
+        .then(function (result) {
           saving = false;
-          markSaved();
-          scheduleHide(SAVED_HIDE_MS);
+          const reopened = result && result.reopened;
+          markSaved(
+            reopened ? "Already saved · moved back to learning" : "Saved"
+          );
+          scheduleHide(reopened ? 2200 : SAVED_HIDE_MS);
         })
         .catch(function (err) {
           saving = false;
