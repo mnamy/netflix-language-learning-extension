@@ -59,7 +59,9 @@ export function shapeLemmaResult(clickedForm, data) {
   const lemma = cleanToken((data && data.lemma) || clicked) || clicked;
   const display =
     cleanToken((data && data.display_word) || lemma) || lemma;
-  const translation = String((data && data.translation) || "")
+  const translation = String(
+    (data && (data.contextual_translation || data.translation)) || ""
+  )
     .replace(/^["'\s]+|["'\s]+$/g, "")
     .split(/\r?\n/)[0]
     .trim();
@@ -72,6 +74,7 @@ export function shapeLemmaResult(clickedForm, data) {
     clicked_form: clicked,
     lemma: lemma,
     part_of_speech: allowedPos(data && data.part_of_speech),
+    contextual_translation: translation,
     translation: translation,
     display_word: display,
   };
@@ -89,27 +92,43 @@ export async function translateWord(word, sentence) {
 
   const prompt =
     "You analyze ONE Spanish subtitle token for a vocabulary app.\n" +
-    "Use the sentence only to disambiguate. Never quote or repeat the sentence.\n" +
+    "The subtitle is the source of meaning. Use it to choose the sense of THIS clicked word in THIS line.\n" +
+    "Do not return the most common dictionary gloss of the lemma unless that is actually the meaning here.\n" +
+    "Never quote, repeat, or store the sentence in any field.\n" +
     "Return JSON only, no markdown, with keys:\n" +
-    "clicked_form, lemma, part_of_speech, translation, display_word.\n\n" +
+    "clicked_form, lemma, part_of_speech, contextual_translation, display_word.\n\n" +
+    "Steps:\n" +
+    "1. Identify the clicked form (accents kept).\n" +
+    "2. Determine the lemma (dictionary headword to SAVE).\n" +
+    "3. Determine part of speech in this sentence.\n" +
+    "4. Translate the clicked word's meaning in this subtitle, not a generic lemma gloss.\n\n" +
     "Rules:\n" +
-    "- clicked_form: the exact clicked token (accents kept).\n" +
-    "- lemma: canonical dictionary headword to SAVE.\n" +
-    "- Verbs: Spanish infinitive. hablé→hablar, comiendo→comer.\n" +
+    "- clicked_form: the exact clicked token.\n" +
+    "- lemma: canonical headword. Verbs: infinitive (hablé→hablar, comiendo→comer).\n" +
     "- If a verb has a clear attached clitic (lo, la, los, las, le, les, me, te, se, nos, os), strip it: sacarlo→sacar, dámelo→dar.\n" +
     "- Nouns: singular lemma. cuentas (noun)→cuenta, perros→perro.\n" +
-    "- Keep gendered pairs separate: hermano and hermana stay distinct. Do not map to a shared form.\n" +
-    "- fui/fue/era/soy: ser vs ir from sentence context.\n" +
-    "- cuenta/cuentas: verb contar vs noun cuenta from sentence context.\n" +
+    "- Keep gendered pairs separate: hermano and hermana stay distinct.\n" +
+    "- fui/fue/era/soy: ser vs ir from sentence meaning.\n" +
+    "- cuenta/cuentas: verb contar vs noun cuenta from sentence meaning.\n" +
     "- part_of_speech: verb, noun, adjective, adverb, phrase, or other.\n" +
-    "- translation: concise English of the LEMMA in this sense, 1-4 words.\n" +
+    "- contextual_translation: concise English of THIS word in THIS subtitle, 1-6 words.\n" +
+    "  A short qualifier is allowed when the sense is not the default dictionary meaning.\n" +
+    "  Prefer the contextual sense: time expressions, motion, idioms, light verbs, etc.\n" +
     "- display_word: usually the lemma.\n" +
     "- Do not translate neighboring words.\n\n" +
-    "Examples:\n" +
-    '{"clicked_form":"hablé","lemma":"hablar","part_of_speech":"verb","translation":"to speak","display_word":"hablar"}\n' +
-    '{"clicked_form":"sacarlo","lemma":"sacar","part_of_speech":"verb","translation":"to take out","display_word":"sacar"}\n' +
-    '{"clicked_form":"cuentas","lemma":"cuenta","part_of_speech":"noun","translation":"account","display_word":"cuenta"}\n' +
-    '{"clicked_form":"hermana","lemma":"hermana","part_of_speech":"noun","translation":"sister","display_word":"hermana"}\n\n' +
+    "Examples of CONTEXTUAL sense (lemma can stay canonical):\n" +
+    "Clicked llevas | Sentence: ¿Llevas mucho? - Veinte minutos...\n" +
+    '{"clicked_form":"llevas","lemma":"llevar","part_of_speech":"verb","contextual_translation":"to have been (for a time)","display_word":"llevar"}\n' +
+    "Clicked cogió | Sentence: cogió esta carretera\n" +
+    '{"clicked_form":"cogió","lemma":"coger","part_of_speech":"verb","contextual_translation":"to take (a road)","display_word":"coger"}\n' +
+    "Clicked hablé | Sentence: Ayer hablé con ella.\n" +
+    '{"clicked_form":"hablé","lemma":"hablar","part_of_speech":"verb","contextual_translation":"to speak","display_word":"hablar"}\n' +
+    "Clicked sacarlo | Sentence: Voy a sacarlo ahora.\n" +
+    '{"clicked_form":"sacarlo","lemma":"sacar","part_of_speech":"verb","contextual_translation":"to take out","display_word":"sacar"}\n' +
+    "Clicked cuentas | Sentence: Revisa las cuentas del banco.\n" +
+    '{"clicked_form":"cuentas","lemma":"cuenta","part_of_speech":"noun","contextual_translation":"account","display_word":"cuenta"}\n' +
+    "Clicked hermana | Sentence: Mi hermana llega mañana.\n" +
+    '{"clicked_form":"hermana","lemma":"hermana","part_of_speech":"noun","contextual_translation":"sister","display_word":"hermana"}\n\n' +
     "Clicked: " +
     word +
     "\nSentence: " +
