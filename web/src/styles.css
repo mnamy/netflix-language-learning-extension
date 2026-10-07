@@ -377,7 +377,28 @@ h1 {
   margin-top: 16px;
 }
 
-.review-nav button,
+.review-nav {
+  justify-content: flex-start;
+}
+
+.review-nav button {
+  flex: 0 0 auto;
+  min-width: 88px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.review-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .review-grade button {
   flex: 1;
   min-height: 44px;

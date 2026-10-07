@@ -59,6 +59,112 @@ export function afterIncorrectReview() {
   };
 }
 
+export const SESSION_NEEDED = 2;
+export const GAP_MISS = 3;
+export const GAP_HIT = 5;
+
+export function needsSessionPair(item) {
+  return normalizeStatus(item && item.learning_status) !== "mastered";
+}
+
+export function insertLater(queue, card, gap) {
+  const rest = Array.isArray(queue) ? queue.slice() : [];
+  if (!card) {
+    return rest;
+  }
+  if (rest.length === 0) {
+    return [card];
+  }
+  let at = Number(gap);
+  if (!Number.isFinite(at) || at < 1) {
+    at = 1;
+  }
+  at = Math.min(at, rest.length);
+  rest.splice(at, 0, card);
+  return rest;
+}
+
+export function sessionAfterGrade(input) {
+  const queue = (input && input.queue) || [];
+  const sessionCounts = Object.assign({}, (input && input.sessionCounts) || {});
+  const card = input && input.card;
+  const knew = Boolean(input && input.knew);
+  const practiceMastered = Boolean(input && input.practiceMastered);
+  if (!card) {
+    return {
+      queue: queue,
+      sessionCounts: sessionCounts,
+      persist: null,
+      nextCard: null,
+      doneForToday: false,
+    };
+  }
+
+  const rest = queue.filter(function (item) {
+    return item.id !== card.id;
+  });
+  const pair = !practiceMastered && needsSessionPair(card);
+
+  if (!knew) {
+    sessionCounts[card.id] = 0;
+    const persist = afterIncorrectReview();
+    const nextCard = Object.assign({}, card, persist);
+    return {
+      queue: insertLater(rest, nextCard, GAP_MISS),
+      sessionCounts: sessionCounts,
+      persist: persist,
+      nextCard: nextCard,
+      doneForToday: false,
+    };
+  }
+
+  if (!pair) {
+    const persist = afterCorrectReview(card);
+    const nextCard = Object.assign({}, card, persist);
+    return {
+      queue: rest,
+      sessionCounts: sessionCounts,
+      persist: persist,
+      nextCard: nextCard,
+      doneForToday: true,
+    };
+  }
+
+  const nextCount = Number(sessionCounts[card.id] || 0) + 1;
+  sessionCounts[card.id] = nextCount;
+  if (nextCount >= SESSION_NEEDED) {
+    const persist = afterCorrectReview(card);
+    const nextCard = Object.assign({}, card, persist);
+    return {
+      queue: rest,
+      sessionCounts: sessionCounts,
+      persist: persist,
+      nextCard: nextCard,
+      doneForToday: true,
+    };
+  }
+
+  return {
+    queue: insertLater(rest, card, GAP_HIT),
+    sessionCounts: sessionCounts,
+    persist: null,
+    nextCard: card,
+    doneForToday: false,
+  };
+}
+
+export function reviewSnapshotFields(item) {
+  if (!item) {
+    return null;
+  }
+  return {
+    learning_status: item.learning_status,
+    successful_reviews: item.successful_reviews,
+    review_interval_days: item.review_interval_days,
+    next_review_at: item.next_review_at,
+  };
+}
+
 export function patchForManualStatus(status) {
   const next = normalizeStatus(status);
   if (next === "learning") {

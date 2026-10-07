@@ -1,31 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  afterCorrectReview,
-  afterIncorrectReview,
   dueQueue,
   masteredList,
+  needsSessionPair,
   normalizeStatus,
+  reviewSnapshotFields,
+  SESSION_NEEDED,
+  sessionAfterGrade,
 } from "../lib/reviewSchedule";
 import { fetchSavedWords, updateReviewProgress } from "../lib/savedWords";
-
-function advanceQueue(list, cardId, graded) {
-  const rest = [];
-  for (let i = 0; i < list.length; i++) {
-    if (list[i].id !== cardId) {
-      rest.push(list[i]);
-    }
-  }
-  if (graded && new Date(graded.next_review_at).getTime() <= Date.now()) {
-    rest.push(graded);
-  }
-  return rest;
-}
 
 export function Review() {
   const [allWords, setAllWords] = useState([]);
   const [queue, setQueue] = useState([]);
-  const [index, setIndex] = useState(0);
+  const [sessionCounts, setSessionCounts] = useState({});
+  const [undo, setUndo] = useState(null);
   const [flipped, setFlipped] = useState(false);
   const [mode, setMode] = useState("toEnglish");
   const [practiceMastered, setPracticeMastered] = useState(false);
@@ -36,7 +26,8 @@ export function Review() {
   function applyList(list, masteredPractice) {
     setAllWords(list);
     setQueue(masteredPractice ? masteredList(list) : dueQueue(list));
-    setIndex(0);
+    setSessionCounts({});
+    setUndo(null);
     setFlipped(false);
   }
 
@@ -63,27 +54,45 @@ export function Review() {
     };
   }, []);
 
-  const card = queue[index];
+  const card = queue[0];
   const reverse = mode === "toForeign";
   const front = reverse ? card?.translation : card?.word;
   const back = reverse ? card?.word : card?.translation;
   const masteredCount = masteredList(allWords).length;
+  const sessionHits = card ? Number(sessionCounts[card.id] || 0) : 0;
+  const showSessionPair = Boolean(card && !practiceMastered && needsSessionPair(card));
 
   async function grade(knew) {
     if (!card || saving) {
       return;
     }
     setSaving(true);
-    const patch = knew ? afterCorrectReview(card) : afterIncorrectReview();
-    const cardId = card.id;
-    const graded = { ...card, ...patch };
+    const previous = {
+      queue: queue,
+      allWords: allWords,
+      sessionCounts: sessionCounts,
+      cardId: card.id,
+      db: reviewSnapshotFields(card),
+      persist: false,
+    };
+    const result = sessionAfterGrade({
+      queue: queue,
+      sessionCounts: sessionCounts,
+      card: card,
+      knew: knew,
+      practiceMastered: practiceMastered,
+    });
     try {
-      await updateReviewProgress(cardId, patch);
+      if (result.persist) {
+        await updateReviewProgress(card.id, result.persist);
+        previous.persist = true;
+      }
+      setUndo(previous);
       setAllWords((current) =>
-        current.map((item) => (item.id === cardId ? graded : item))
+        current.map((item) => (item.id === card.id ? result.nextCard : item))
       );
-      setQueue((current) => advanceQueue(current, cardId, graded));
-      setIndex(0);
+      setQueue(result.queue);
+      setSessionCounts(result.sessionCounts);
       setFlipped(false);
     } catch (err) {
       setError(err.message || "Could not update status");
@@ -92,17 +101,40 @@ export function Review() {
     }
   }
 
+  async function undoLast() {
+    if (!undo || saving) {
+      return;
+    }
+    setSaving(true);
+    try {
+      if (undo.persist && undo.cardId && undo.db) {
+        await updateReviewProgress(undo.cardId, undo.db);
+      }
+      setQueue(undo.queue);
+      setAllWords(undo.allWords);
+      setSessionCounts(undo.sessionCounts);
+      setUndo(null);
+      setFlipped(false);
+    } catch (err) {
+      setError(err.message || "Could not undo");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function startMasteredPractice() {
     setPracticeMastered(true);
     setQueue(masteredList(allWords));
-    setIndex(0);
+    setSessionCounts({});
+    setUndo(null);
     setFlipped(false);
   }
 
   function startDueReview() {
     setPracticeMastered(false);
     setQueue(dueQueue(allWords));
-    setIndex(0);
+    setSessionCounts({});
+    setUndo(null);
     setFlipped(false);
   }
 
@@ -135,11 +167,16 @@ export function Review() {
           </p>
         ) : (
           <p className="lede">
-            You are caught up for today. Mastered words stay in the word bank
-            and come back later for spaced review.
+            You are caught up for today. New and learning cards need two spaced
+            corrects in a session before they wait until the next due date.
           </p>
         )}
         <p className="actions">
+          {undo && (
+            <button type="button" className="text-action" onClick={undoLast}>
+              ← Back
+            </button>
+          )}
           {!practiceMastered && masteredCount > 0 && (
             <button type="button" className="text-action" onClick={startMasteredPractice}>
               Review mastered
@@ -162,7 +199,7 @@ export function Review() {
       <p className="lede">
         {practiceMastered
           ? "Practicing mastered words. A miss sends the card back to learning."
-          : "Cards due today. A correct answer schedules the next review later, so the same sitting cannot mark a word mastered."}
+          : "New and learning cards need two spaced corrects today. That does not master them."}
       </p>
       <div className="review-mode" role="group" aria-label="Review direction">
         <button
@@ -216,12 +253,21 @@ export function Review() {
         </span>
         <strong>{flipped ? back : front}</strong>
         <span className="card-meta">
-          {[card.source_language, normalizeStatus(card.learning_status)]
+          {[
+            card.source_language,
+            normalizeStatus(card.learning_status),
+            showSessionPair ? sessionHits + " of " + SESSION_NEEDED + " correct today" : "",
+          ]
             .filter(Boolean)
             .join(" · ")}
         </span>
         <span className="card-hint">{flipped ? "Click to hide" : "Click to flip"}</span>
       </button>
+      <div className="review-nav">
+        <button type="button" disabled={!undo || saving} onClick={undoLast}>
+          ← Back
+        </button>
+      </div>
       <div className="review-grade">
         <button
           type="button"
@@ -241,8 +287,8 @@ export function Review() {
         </button>
       </div>
       <p className="card-progress">
-        {queue.length} card{queue.length === 1 ? "" : "s"} left
-        {practiceMastered ? " · mastered practice" : " due"}
+        {queue.length} card{queue.length === 1 ? "" : "s"} in this session
+        {practiceMastered ? " · mastered practice" : ""}
       </p>
     </section>
   );
